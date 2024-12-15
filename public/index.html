@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <!-- <meta name="viewport" content="width=device-width, user-scalable=no"> -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+
+
+    <title>Snake Game</title>
+    <style>
+        body {
+            background-color: #000;
+            margin: 0;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background-color: #111;
+            border: 2px solid #fff;
+        }
+        #message {
+            color: #fff;
+            text-align: center;
+            font-family: Arial, sans-serif;
+            font-size: 24px;
+            position: absolute;
+            width: 100%;
+            top: 40%;
+        }
+        #message button {
+            margin-top: 20px;
+            font-size: 24px;
+            padding: 10px 20px;
+            cursor: pointer;
+            background-color: #333;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+        }
+        #message button:active {
+            background-color: #555;
+        }
+
+        #scoreDisplay{
+            color: #fff;
+            text-align: center;
+            position: relative;
+            left:0;
+            bottom: -5px;
+            width: 100px;
+            border-style: 1px solid white;
+        }
+        /* Stili per i pulsanti di controllo */
+        #controls {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        .control-button {
+            background-color: #333;
+            color: #fff;
+            font-size: 18px;
+            padding: 15px;
+            margin: 5px;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            width: 110px;
+            height: 50px;
+        }
+
+        #poop{
+            color: #b64816;
+        }
+
+        .control-button:active {
+            background-color: #555;
+        }
+
+        #controls_top {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+		
+		#controls_bottom {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+<canvas id="gameCanvas" width="400" height="500"></canvas>
+<div id="scoreDisplay">S:</div>
+</div>
+<div id="message">
+    <p id="messageText">Premi il pulsante sotto per iniziare</p>
+    <button id="startButton">Inizia</button>
+</div>
+<!-- Pulsanti di controllo -->
+<div id="controls_top">
+    <button class="control-button" id="upButton">&#x2191;</button>
+</div>
+<div id="controls">
+    <button class="control-button" id="leftButton">&#x2190;</button>
+	<button class="control-button" id="centerButton">&nbsp;</button>
+    <button class="control-button" id="rightButton">&#x2192;</button>
+</div>
+<div id="controls_bottom">
+    <button class="control-button" id="downButton">&#x2193;</button>
+</div>
+<script src="./js/socket.io.js"></script>
+<script>
+    const startButton = document.getElementById('startButton');
+    const messageDiv = document.getElementById('message');
+    const SERVER_IP = "192.168.1.11";
+    const SERVER_PORT = "3000";
+
+    // Seleziona i bottoni direzionali
+    const upButton = document.getElementById('upButton');
+    const leftButton = document.getElementById('leftButton');
+    const rightButton = document.getElementById('rightButton');
+    const downButton = document.getElementById('downButton');
+    const centerButton = document.getElementById('centerButton');
+    const scoreDisplay = document.getElementById('scoreDisplay');
+   
+
+    const socket = io("http://"+SERVER_IP+":"+SERVER_PORT); // Connetti al server
+
+    let mySnakeId = null; // ID del serpente del giocatore
+    let mySnake = null; // Serpente del giocatore
+    let snakes = {}; // Stato di tutti i serpenti
+    let food = null; // Posizione del cibo
+    let poops = null; //posizioni delle cacche
+    const gridSize = 10; // Dimensione della griglia
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Inizializza il serpente
+    socket.emit('initializeSnake', { color: 'green', xMax: canvas.width / gridSize, yMax: canvas.height / gridSize });
+    socket.on('snakeInitialized', (data) => {
+        console.log('Serpente inizializzato:', data);
+        mySnakeId = data.id;
+        mySnake = data.snake;
+        snakes[mySnakeId] = mySnake;
+    });
+
+    // Aggiorna la direzione con i tasti freccia
+    let snakeDirection = "right";
+    let canMove = true;
+    document.addEventListener('keydown', (e) => {
+        if(!canMove){ return; }
+        canMove = false;
+        let direction = null;
+        if (e.key === 'ArrowUp') direction = changeDirection('up');
+        if (e.key === 'ArrowDown') direction = changeDirection('down');
+        if (e.key === 'ArrowLeft') direction = changeDirection('left');
+        if (e.key === 'ArrowRight') direction = changeDirection('right');
+        if (direction) {
+            socket.emit('updateDirection', direction);
+        }
+
+        if (e.key == " " || e.code == "Space" || e.keyCode == 32 ) {
+            socket.emit('poop');
+        }
+    });
+
+    // Funzione per cambiare direzione
+    function changeDirection(newDirection) {
+        snakeDirection = mySnake.body[0].dir;
+        // Verifica che la direzione non sia opposta a quella attuale
+        if (
+            (newDirection === 'up' && snakeDirection !== 'down') ||
+            (newDirection === 'down' && snakeDirection !== 'up') ||
+            (newDirection === 'left' && snakeDirection !== 'right') ||
+            (newDirection === 'right' && snakeDirection !== 'left')
+        ) {
+            snakeDirection = newDirection;
+            return newDirection;
+        }
+}
+
+// Aggiungi Event Listener ai bottoni
+upButton.addEventListener('click', () => socket.emit('updateDirection',changeDirection('up')));
+leftButton.addEventListener('click', () => socket.emit('updateDirection',changeDirection('left')));
+rightButton.addEventListener('click', () => socket.emit('updateDirection',changeDirection('right')));
+downButton.addEventListener('click', () => socket.emit('updateDirection',changeDirection('down')));
+centerButton.addEventListener('click',() => socket.emit('poop'));
+
+upButton.addEventListener('touchstart', () => socket.emit('updateDirection',changeDirection('up')));
+leftButton.addEventListener('touchstart', () => socket.emit('updateDirection',changeDirection('left')));
+rightButton.addEventListener('touchstart', () => socket.emit('updateDirection',changeDirection('right')));
+downButton.addEventListener('touchstart', () => socket.emit('updateDirection',changeDirection('down')));
+centerButton.addEventListener('touchstart',() => socket.emit('poop'));
+
+    // Ricevi la posizione del cibo
+    socket.on('food', (data) => {
+        console.log('Cibo aggiornato:', data);
+        food = data;
+    });
+
+    socket.on('poop',(data) =>{
+        console.log("Cacca...");
+        poops = data;
+        console.log(data);
+    });
+
+    // Aggiorna lo stato di tutti i serpenti
+    socket.on('updateSnakes', (serverSnakes) => {
+        snakes = serverSnakes;
+        if (mySnakeId) {
+            mySnake = snakes[mySnakeId];
+            if(mySnake && mySnake.body && Array.isArray(mySnake.body))  scoreDisplay.innerText=("S: "+mySnake.body.length);
+        }
+
+        
+    });
+
+    // Aggiorna lo stato di tutti i serpenti
+    socket.on('selfCollision', (snakeId) => {
+        if(snakeId == mySnakeId)
+        {
+            
+            //alert("AAAAHHHHHHHHHHHHHHH!!!!");
+        }
+    });
+
+    // Controlla collisione con il cibo
+    function checkFoodCollision() {
+        if (!food || !mySnake || !mySnake.body || mySnake.body.length === 0) return;
+
+        const head = mySnake.body[0];
+        if (head.x === food.x && head.y === food.y) {
+            socket.emit('eatFood');
+        }
+    }
+
+    // Disegna il gioco
+    function drawGame() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Disegna il cibo
+        if (food) {
+            ctx.fillStyle = 'red';
+            ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize, gridSize);
+        }       
+
+        // Disegna i serpenti
+        for (let id in snakes) {
+            const snake = snakes[id];
+            ctx.fillStyle = snake.color;
+
+            snake.body.forEach((segment) => {
+                ctx.fillRect(segment.x * gridSize, segment.y * gridSize, gridSize - 2, gridSize - 2);
+            });
+        }
+        canMove = true;
+
+         //disegna le cacche
+         if(poops != null && Array.isArray(poops))
+         {
+            for(let idPoop in poops)
+            {
+                let poop = poops[idPoop];                
+                ctx.fillStyle = '#b64816';
+                ctx.fillRect(poop.x * gridSize, poop.y * gridSize, gridSize, gridSize);
+            }            
+        }
+    }
+
+    // Loop del gioco
+    function gameLoop() {
+        checkFoodCollision();
+        drawGame();
+        requestAnimationFrame(gameLoop);
+    }
+
+
+    startButton.addEventListener('click', () => {
+            messageDiv.style.display = 'none';
+
+            socket.emit('getFood'); // Richiedi la posizione iniziale del cibo
+
+            gameLoop(); // Avvia il gioco
+        }
+    );
+
+    
+</script>
+
+</body>
+</html>
